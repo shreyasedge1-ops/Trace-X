@@ -1,0 +1,6 @@
+flask
+requests
+networkx
+pandas
+scikit-learn
+gunicorn
