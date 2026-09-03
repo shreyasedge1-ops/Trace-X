@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TRACE-X Forensics Dashboard</title>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .search-box { background: #1e293b; padding: 20px; border-radius: 12px; display: flex; gap: 12px; margin-bottom: 20px; }
+        input { flex: 1; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 8px; font-family: monospace; font-size: 14px; }
+        button { padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        
+        /* Dynamic Banner */
+        .banner { padding: 16px 20px; border-radius: 8px; font-weight: bold; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 20px; display: none; }
+        .bg-HOSTED { background: #166534; color: #4ade80; border: 1px solid #22c55e; }
+        .bg-INFERRED { background: #854d0e; color: #facc15; border: 1px solid #eab308; }
+        .bg-UNHOSTED { background: #991b1b; color: #fca5a5; border: 1px solid #ef4444; }
+
+        /* Results Grid */
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; display: none; }
+        .card { background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
+        .card-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; }
+        .card-value { font-size: 16px; font-weight: 600; font-family: monospace; }
+        .progress-bar { width: 100%; background: #334155; height: 8px; border-radius: 4px; margin-top: 8px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s; }
+        
+        #network { width: 100%; height: 350px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>TRACE-X VASP Identification Engine</h2>
+        
+        <!-- 1. Search Bar -->
+        <div class="search-box">
+            <input type="text" id="walletInput" placeholder="Paste Ethereum Wallet Address (0x...)" value="0x28c6c06298d514db089934071355e5743bf21d60">
+            <button onclick="analyzeAddress()">Analyze Address</button>
+        </div>
+
+        <!-- 2. Main Status Banner -->
+        <div id="statusBanner" class="banner"></div>
+
+        <!-- 3. Detailed Results Grid -->
+        <div id="resultsGrid" class="grid">
+            <div class="card"><div class="card-label">Target Address</div><div class="card-value" id="targetAddr">-</div></div>
+            <div class="card"><div class="card-label">Entity Name</div><div class="card-value" id="entityName">-</div></div>
+            <div class="card"><div class="card-label">Wallet Category</div><div class="card-value" id="walletCategory">-</div></div>
+            <div class="card"><div class="card-label">Detection Method</div><div class="card-value" id="detectionMethod">-</div></div>
+            <div class="card">
+                <div class="card-label">Confidence Level</div>
+                <div class="card-value" id="confidenceVal">0%</div>
+                <div class="progress-bar"><div id="confidenceFill" class="progress-fill"></div></div>
+            </div>
+            <div class="card"><div class="card-label">Compliance Flag</div><div class="card-value" id="complianceFlag">-</div></div>
+        </div>
+
+        <div id="network"></div>
+    </div>
+
+    <script>
+        async function analyzeAddress() {
+            const address = document.getElementById('walletInput').value.trim();
+            if (!address) return;
+
+            const response = await fetch(`/api/v1/investigate?address=${address}`);
+            const data = await response.json();
+
+            // Reveal sections
+            document.getElementById('statusBanner').style.display = 'block';
+            document.getElementById('resultsGrid').style.display = 'grid';
+            document.getElementById('network').style.display = 'block';
+
+            // Populate Grid Data
+            const target = data.target_address || address;
+            document.getElementById('targetAddr').innerText = `${target.slice(0,6)}...${target.slice(-4)}`;
+            document.getElementById('entityName').innerText = data.risk_analysis.entity_name || "Unattributed";
+            document.getElementById('walletCategory').innerText = data.risk_analysis.wallet_category || "Personal Wallet";
+            document.getElementById('detectionMethod').innerText = data.risk_analysis.detection_method || "None";
+            
+            const conf = data.risk_analysis.confidence || 0;
+            document.getElementById('confidenceVal').innerText = `${conf}%`;
+            document.getElementById('confidenceFill').style.width = `${conf}%`;
+            document.getElementById('complianceFlag').innerText = data.risk_analysis.compliance_flag || "Travel Rule Applicable";
+
+            // Set Banner Color & Text based on classification
+            const banner = document.getElementById('statusBanner');
+            const category = data.risk_analysis.category_type; // 'HOSTED', 'INFERRED', or 'UNHOSTED'
+            
+            if (category === 'HOSTED') {
+                banner.className = 'banner bg-HOSTED';
+                banner.innerText = '🟢 HOSTED VASP DETECTED (Known Exchange)';
+            } else if (category === 'INFERRED') {
+                banner.className = 'banner bg-INFERRED';
+                banner.innerText = '🟠 INFERRED VASP (DEPOSIT ADDRESS)';
+            } else {
+                banner.className = 'banner bg-UNHOSTED';
+                banner.innerText = '🔴 UNHOSTED / SELF-CUSTODY WALLET';
+            }
+
+            // Graph visualization
+            if (data.graph_data) {
+                const nodes = new vis.DataSet(data.graph_data.nodes.map(n => ({ id: n.id, label: n.label || n.id.slice(0,6) })));
+                const edges = new vis.DataSet(data.graph_data.edges.map(e => ({ from: e.source, to: e.target, label: `${e.amount} ETH` })));
+                new vis.Network(document.getElementById('network'), { nodes, edges }, { physics: { enabled: true } });
+            }
+        }
+    </script>
+</body>
+</html>
