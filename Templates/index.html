@@ -2,108 +2,383 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>TRACE-X Forensics Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TRACE-X Forensics Terminal</title>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 24px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .search-box { background: #1e293b; padding: 20px; border-radius: 12px; display: flex; gap: 12px; margin-bottom: 20px; }
-        input { flex: 1; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; color: #fff; border-radius: 8px; font-family: monospace; font-size: 14px; }
-        button { padding: 12px 24px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        button:hover { background: #2563eb; }
-        
-        /* Dynamic Banner */
-        .banner { padding: 16px 20px; border-radius: 8px; font-weight: bold; font-size: 18px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 20px; display: none; }
-        .bg-HOSTED { background: #166534; color: #4ade80; border: 1px solid #22c55e; }
-        .bg-INFERRED { background: #854d0e; color: #facc15; border: 1px solid #eab308; }
-        .bg-UNHOSTED { background: #991b1b; color: #fca5a5; border: 1px solid #ef4444; }
+        :root {
+            --bg-dark: #050811;
+            --panel-bg: rgba(13, 19, 33, 0.75);
+            --panel-border: rgba(56, 189, 248, 0.15);
+            --text-main: #f1f5f9;
+            --text-muted: #64748b;
+            --cyan-glow: #06b6d4;
+            --hosted-color: #10b981;
+            --inferred-color: #f59e0b;
+            --unhosted-color: #ef4444;
+        }
 
-        /* Results Grid */
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; display: none; }
-        .card { background: #1e293b; padding: 16px; border-radius: 8px; border: 1px solid #334155; }
-        .card-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; }
-        .card-value { font-size: 16px; font-weight: 600; font-family: monospace; }
-        .progress-bar { width: 100%; background: #334155; height: 8px; border-radius: 4px; margin-top: 8px; overflow: hidden; }
-        .progress-fill { height: 100%; background: #3b82f6; width: 0%; transition: width 0.3s; }
-        
-        #network { width: 100%; height: 350px; background: #1e293b; border-radius: 12px; border: 1px solid #334155; margin-top: 20px; display: none; }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
+            color: var(--text-main);
+            margin: 0;
+            padding: 24px;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* Top Brand HUD */
+        .hud-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--panel-border);
+            margin-bottom: 24px;
+        }
+
+        .hud-title {
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff 0%, #38bdf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--cyan-glow);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--cyan-glow);
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Quick Test Presets */
+        .preset-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+
+        .preset-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .preset-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .preset-btn:hover {
+            border-color: var(--cyan-glow);
+            background: rgba(6, 182, 212, 0.1);
+        }
+
+        /* Search Control */
+        .search-container {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            padding: 12px;
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+        }
+
+        input {
+            flex: 1;
+            background: #090d16;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 14px 18px;
+            color: var(--cyan-glow);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--cyan-glow);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.2);
+        }
+
+        button.action-btn {
+            background: linear-gradient(135deg, #06b6d4 0%, #3b82f6 100%);
+            color: #fff;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+        }
+
+        button.action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(6, 182, 212, 0.5);
+        }
+
+        /* Animated Banner */
+        .banner {
+            padding: 16px 24px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 15px;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+            display: none;
+            text-align: center;
+            text-transform: uppercase;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        .bg-HOSTED { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #10b981; }
+        .bg-INFERRED { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid #f59e0b; }
+        .bg-UNHOSTED { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #ef4444; }
+
+        /* Dashboard Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 24px;
+            display: none;
+        }
+
+        .side-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .card-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .progress-track {
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--cyan-glow);
+            width: 0%;
+            transition: width 0.8s ease;
+        }
+
+        /* Graph Panel */
+        .graph-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--panel-border);
+            border-radius: 14px;
+            padding: 18px;
+            display: flex;
+            flex-direction: flex;
+            flex-direction: column;
+        }
+
+        #network {
+            flex: 1;
+            min-height: 400px;
+            background: #040711;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>TRACE-X VASP Identification Engine</h2>
-        
-        <!-- 1. Search Bar -->
-        <div class="search-box">
-            <input type="text" id="walletInput" placeholder="Paste Ethereum Wallet Address (0x...)" value="0x28c6c06298d514db089934071355e5743bf21d60">
-            <button onclick="analyzeAddress()">Analyze Address</button>
+        <div class="hud-header">
+            <div class="hud-title"><div class="live-dot"></div> TRACE-X FORENSICS ENGINE</div>
+            <span style="font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono';">v2.4_RENDER_LIVE</span>
         </div>
 
-        <!-- 2. Main Status Banner -->
+        <div class="preset-bar">
+            <span class="preset-label">Test Scenarios:</span>
+            <button class="preset-btn" onclick="setPreset('0x28c6c06298d514db089934071355e5743bf21d60')">Binance (Hosted)</button>
+            <button class="preset-btn" onclick="setPreset('0x111111111111111111111111111111111111111a')">Inferred Sweep</button>
+            <button class="preset-btn" onclick="setPreset('0x0000000000000000000000000000000000009999')">Unhosted Wallet</button>
+        </div>
+
+        <div class="search-container">
+            <input type="text" id="walletInput" placeholder="Paste Target Wallet Address (0x...)">
+            <button class="action-btn" onclick="analyzeAddress()">RUN TRACE</button>
+        </div>
+
         <div id="statusBanner" class="banner"></div>
 
-        <!-- 3. Detailed Results Grid -->
-        <div id="resultsGrid" class="grid">
-            <div class="card"><div class="card-label">Target Address</div><div class="card-value" id="targetAddr">-</div></div>
-            <div class="card"><div class="card-label">Entity Name</div><div class="card-value" id="entityName">-</div></div>
-            <div class="card"><div class="card-label">Wallet Category</div><div class="card-value" id="walletCategory">-</div></div>
-            <div class="card"><div class="card-label">Detection Method</div><div class="card-value" id="detectionMethod">-</div></div>
-            <div class="card">
-                <div class="card-label">Confidence Level</div>
-                <div class="card-value" id="confidenceVal">0%</div>
-                <div class="progress-bar"><div id="confidenceFill" class="progress-fill"></div></div>
+        <div id="dashboardGrid" class="dashboard-grid">
+            <div class="side-cards">
+                <div class="card">
+                    <div class="card-title">Target Address</div>
+                    <div class="card-value" id="targetAddr" style="color: var(--cyan-glow);">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Attributed Entity</div>
+                    <div class="card-value" id="entityName">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Classification Category</div>
+                    <div class="card-value" id="walletCategory">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Detection Heuristic</div>
+                    <div class="card-value" id="detectionMethod">-</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Confidence Metric</div>
+                    <div class="card-value" id="confidenceVal">0%</div>
+                    <div class="progress-track"><div id="confidenceFill" class="progress-fill"></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Travel Rule Protocol</div>
+                    <div class="card-value" id="complianceFlag" style="font-size: 13px;">-</div>
+                </div>
             </div>
-            <div class="card"><div class="card-label">Compliance Flag</div><div class="card-value" id="complianceFlag">-</div></div>
-        </div>
 
-        <div id="network"></div>
+            <div class="graph-panel">
+                <div class="card-title" style="margin-bottom: 12px;">Visual Topology Map</div>
+                <div id="network"></div>
+            </div>
+        </div>
     </div>
 
     <script>
+        function setPreset(addr) {
+            document.getElementById('walletInput').value = addr;
+            analyzeAddress();
+        }
+
         async function analyzeAddress() {
             const address = document.getElementById('walletInput').value.trim();
             if (!address) return;
 
-            const response = await fetch(`/api/v1/investigate?address=${address}`);
-            const data = await response.json();
+            try {
+                // FIXED: Direct call to your live Render backend URL
+                const response = await fetch(`https://trace-x-1vzk.onrender.com/api/v1/investigate?address=${address}`);
+                
+                if (!response.ok) throw new Error("API Execution Error");
+                const data = await response.json();
 
-            // Reveal sections
-            document.getElementById('statusBanner').style.display = 'block';
-            document.getElementById('resultsGrid').style.display = 'grid';
-            document.getElementById('network').style.display = 'block';
+                // Unhide Panels
+                document.getElementById('statusBanner').style.display = 'block';
+                document.getElementById('dashboardGrid').style.display = 'grid';
 
-            // Populate Grid Data
-            const target = data.target_address || address;
-            document.getElementById('targetAddr').innerText = `${target.slice(0,6)}...${target.slice(-4)}`;
-            document.getElementById('entityName').innerText = data.risk_analysis.entity_name || "Unattributed";
-            document.getElementById('walletCategory').innerText = data.risk_analysis.wallet_category || "Personal Wallet";
-            document.getElementById('detectionMethod').innerText = data.risk_analysis.detection_method || "None";
-            
-            const conf = data.risk_analysis.confidence || 0;
-            document.getElementById('confidenceVal').innerText = `${conf}%`;
-            document.getElementById('confidenceFill').style.width = `${conf}%`;
-            document.getElementById('complianceFlag').innerText = data.risk_analysis.compliance_flag || "Travel Rule Applicable";
+                // Populate Stats
+                const target = data.target_address || address;
+                document.getElementById('targetAddr').innerText = `${target.slice(0,8)}...${target.slice(-6)}`;
+                document.getElementById('entityName').innerText = data.risk_analysis.entity_name || "Unattributed";
+                document.getElementById('walletCategory').innerText = data.risk_analysis.wallet_category || "Personal Wallet";
+                document.getElementById('detectionMethod').innerText = data.risk_analysis.detection_method || "None";
+                
+                const conf = data.risk_analysis.confidence || 0;
+                document.getElementById('confidenceVal').innerText = `${conf}%`;
+                document.getElementById('confidenceFill').style.width = `${conf}%`;
+                document.getElementById('complianceFlag').innerText = data.risk_analysis.compliance_flag || "Enhanced Due Diligence";
 
-            // Set Banner Color & Text based on classification
-            const banner = document.getElementById('statusBanner');
-            const category = data.risk_analysis.category_type; // 'HOSTED', 'INFERRED', or 'UNHOSTED'
-            
-            if (category === 'HOSTED') {
-                banner.className = 'banner bg-HOSTED';
-                banner.innerText = '🟢 HOSTED VASP DETECTED (Known Exchange)';
-            } else if (category === 'INFERRED') {
-                banner.className = 'banner bg-INFERRED';
-                banner.innerText = '🟠 INFERRED VASP (DEPOSIT ADDRESS)';
-            } else {
-                banner.className = 'banner bg-UNHOSTED';
-                banner.innerText = '🔴 UNHOSTED / SELF-CUSTODY WALLET';
-            }
+                // Dynamic Banner Color
+                const banner = document.getElementById('statusBanner');
+                const cat = data.risk_analysis.category_type;
+                
+                if (cat === 'HOSTED') {
+                    banner.className = 'banner bg-HOSTED';
+                    banner.innerText = '● HOSTED VASP IDENTIFIED (FULL REGISTRY MATCH)';
+                } else if (cat === 'INFERRED') {
+                    banner.className = 'banner bg-INFERRED';
+                    banner.innerText = '▲ INFERRED VASP (DEPOSIT SWEEP HEURISTIC)';
+                } else {
+                    banner.className = 'banner bg-UNHOSTED';
+                    banner.innerText = '✖ UNHOSTED / SELF-CUSTODY WALLET';
+                }
 
-            // Graph visualization
-            if (data.graph_data) {
-                const nodes = new vis.DataSet(data.graph_data.nodes.map(n => ({ id: n.id, label: n.label || n.id.slice(0,6) })));
-                const edges = new vis.DataSet(data.graph_data.edges.map(e => ({ from: e.source, to: e.target, label: `${e.amount} ETH` })));
-                new vis.Network(document.getElementById('network'), { nodes, edges }, { physics: { enabled: true } });
+                // Vis.js Interactive Topology Map
+                if (data.graph_data) {
+                    const nodes = new vis.DataSet(data.graph_data.nodes.map(n => ({ 
+                        id: n.id, 
+                        label: n.label || `${n.id.slice(0,6)}...`,
+                        shape: 'dot',
+                        size: n.id.toLowerCase() === target.toLowerCase() ? 24 : 14,
+                        color: {
+                            background: n.id.toLowerCase() === target.toLowerCase() ? '#06b6d4' : '#1e293b',
+                            border: n.id.toLowerCase() === target.toLowerCase() ? '#38bdf8' : '#475569',
+                            highlight: { background: '#3b82f6', border: '#60a5fa' }
+                        },
+                        font: { color: '#f8fafc', face: 'JetBrains Mono', size: 11 }
+                    })));
+
+                    const edges = new vis.DataSet(data.graph_data.edges.map(e => ({ 
+                        from: e.source, 
+                        to: e.target, 
+                        label: `${e.amount} ETH`,
+                        color: { color: '#334155', highlight: '#06b6d4' },
+                        font: { color: '#64748b', strokeWidth: 0, size: 10 },
+                        arrows: { to: { enabled: true, scaleFactor: 0.6 } }
+                    })));
+
+                    const container = document.getElementById('network');
+                    const options = {
+                        physics: { enabled: true, solver: 'forceAtlas2Based' },
+                        interaction: { hover: true, zoomView: true }
+                    };
+
+                    new vis.Network(container, { nodes, edges }, options);
+                }
+            } catch (err) {
+                alert("Target investigation failed. Connecting to Render backend...");
             }
         }
     </script>
